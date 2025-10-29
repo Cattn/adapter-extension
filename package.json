@@ -1,6 +1,6 @@
 {
   "name": "@cattn/adapter-extension",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Svelte adapter that makes chrome extension support easier",
   "keywords": [
     "svelte"
