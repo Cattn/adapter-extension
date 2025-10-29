@@ -1,0 +1,23 @@
+{
+  "name": "@cattn/adapter-extension",
+  "version": "1.0.0",
+  "description": "Svelte adapter that makes chrome extension support easier",
+  "keywords": [
+    "svelte"
+  ],
+  "homepage": "https://github.com/Cattn/adapter-extension#readme",
+  "bugs": {
+    "url": "https://github.com/Cattn/adapter-extension/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cattn/adapter-extension.git"
+  },
+  "license": "ISC",
+  "author": "cattn",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
