@@ -91,6 +91,8 @@ export default function adapterStaticExtension(options = {}) {
 	const adapter = adapterStatic(options);
 	const originalAdapt = adapter.adapt;
 
+	adapter.name = '@cattn/adapter-extension';
+
 	adapter.adapt = async (builder) => {
 		await originalAdapt(builder);
 
