@@ -65,3 +65,6 @@ Also, I'd recommend putting your ``manifest.json``, and any other seperate scrip
 This adapter uses ``adapter-static`` under the hood, with a few modifications to make building for chrome extensions slightly less painful.
 
 With this, you can use chrome extension APIs directly in your svelte app.
+
+## Why not an existing adapter?
+Honestly, I felt that existing adapters either entrenched too much on how my code was built, or had weird requirements. This adapter attempts to be as minimal as possible, providing exactly what's necessary to build your svelte app in an extension-friendly format. It also should support different browser's extension formats much easier!
