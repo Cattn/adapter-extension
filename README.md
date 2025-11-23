@@ -49,6 +49,8 @@ export const prerender = true;
 
 Make sure in your chrome manifest, you have the following (you can change ``<all_urls>`` to whatever set of URLs your extension will be active on. Also, ``scripts`` may be different depending on your ``appDir`` value.)
 
+> Note: This is only needed if your extension is intended to run in the background of the page. If your extension is a sidebar/popup, this won't be needed.)
+
 ```json
 "content_scripts": [
     {
