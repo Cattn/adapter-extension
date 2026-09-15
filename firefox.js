@@ -1,5 +1,8 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+
+const chromeOnlyPermissions = new Set(['sidePanel', 'identity.email', 'offscreen']);
 
 const prefix = '[adapter-extension:firefox]';
 const compatibilityName = '__adapterExtensionFirefox';
@@ -128,6 +131,7 @@ function updateBackground(manifest) {
 	if (!manifest.background?.service_worker) return;
 
 	manifest.background.scripts ??= [manifest.background.service_worker];
+	delete manifest.background.service_worker;
 }
 
 function updateSidebar(manifest) {
@@ -148,9 +152,65 @@ function updateSidebar(manifest) {
 	};
 	delete manifest.side_panel;
 
-	manifest.permissions = (manifest.permissions ?? []).filter(
-		(permission) => permission !== 'sidePanel'
+	if (!manifest.action) {
+		manifest.action = {
+			default_title: manifest.name,
+			default_icon: manifest.icons
+		};
+		warnInferred(
+			'action',
+			manifest.action,
+			'https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions/manifest.json/action'
+		);
+	}
+}
+
+function stripChromeOnlyPermissions(manifest) {
+	if (!manifest.permissions) return;
+
+	manifest.permissions = manifest.permissions.filter(
+		(permission) => !chromeOnlyPermissions.has(permission)
 	);
+}
+
+function addIdentityRedirectHost(manifest) {
+	if (!(manifest.permissions ?? []).includes('identity')) return;
+
+	const geckoId = manifest.browser_specific_settings?.gecko?.id;
+	if (!geckoId) return;
+
+	const hash = crypto.createHash('sha1').update(geckoId).digest('hex');
+	const host = `https://${hash}.extensions.allizom.org/*`;
+
+	manifest.host_permissions ??= [];
+	if (manifest.host_permissions.includes(host)) return;
+
+	manifest.host_permissions.push(host);
+	warn(`Added ${host} to host_permissions for this Firefox build only.`);
+}
+
+function uniqueConcat(existing, additions) {
+	return [...new Set([...(existing ?? []), ...additions])];
+}
+
+function applyOptionalPermissions(manifest, options) {
+	if (options.permissions?.add?.length) {
+		manifest.permissions = uniqueConcat(manifest.permissions, options.permissions.add);
+	}
+
+	if (options.permissions?.remove?.length) {
+		const remove = new Set(options.permissions.remove);
+		manifest.permissions = (manifest.permissions ?? []).filter(
+			(permission) => !remove.has(permission)
+		);
+	}
+
+	if (options.hostPermissions?.add?.length) {
+		manifest.host_permissions = uniqueConcat(
+			manifest.host_permissions,
+			options.hostPermissions.add
+		);
+	}
 }
 
 function updateDefaultLocale(outputDir, manifest) {
@@ -178,7 +238,7 @@ function updateDefaultLocale(outputDir, manifest) {
 	}
 }
 
-function patchManifest(outputDir) {
+function patchManifest(outputDir, options = {}) {
 	const manifestPath = path.join(outputDir, 'manifest.json');
 	if (!fs.existsSync(manifestPath)) {
 		warn(`No manifest.json was found in ${outputDir}.`);
@@ -197,7 +257,10 @@ function patchManifest(outputDir) {
 	updateFirefoxSettings(manifest);
 	updateBackground(manifest);
 	updateSidebar(manifest);
+	stripChromeOnlyPermissions(manifest);
+	addIdentityRedirectHost(manifest);
 	updateDefaultLocale(outputDir, manifest);
+	applyOptionalPermissions(manifest, options);
 
 	fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
 	return manifest;
@@ -251,6 +314,8 @@ function patchJavascript(outputDir, apiReplacements) {
 			source = applyReplacement(source, replacement);
 		}
 
+		source = source.replaceAll('.innerHTML =', '["innerHTML"] =');
+
 		const usesSidePanel = /\b(?:chrome|browser)\.sidePanel\b/.test(source);
 		const usesProfileUserInfo =
 			/\b(?:chrome|browser)\.identity\.getProfileUserInfo\b/.test(source);
@@ -280,6 +345,6 @@ export async function applyFirefoxSupport(outputDir, options = {}) {
 	const apiReplacements = options.apiReplacements ?? [];
 	validateReplacements(apiReplacements);
 
-	patchManifest(outputDir);
+	patchManifest(outputDir, options);
 	patchJavascript(outputDir, apiReplacements);
 }

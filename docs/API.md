@@ -17,20 +17,47 @@ adapter({
 })
 ```
 
-`firefoxBuildScript` defaults to `build-firefox`. Firefox transformations run only when that npm script is active.
+`firefoxBuildScript` defaults to `build-firefox`. Firefox transformations run when that npm script is active, or when `ADAPTER_EXTENSION_FIREFOX=1` is set. Chrome builds stay unchanged unless one of those conditions is true.
+
+```sh
+ADAPTER_EXTENSION_FIREFOX=1 vite build
+```
 
 This enables:
 
 - Firefox manifest validation and safe inference of required fields
-- `background.scripts` generation from `background.service_worker`
+- `background.scripts` generation from `background.service_worker`, then removal of `service_worker` (Firefox MV3 / `web-ext` / AMO reject the Chrome key)
 - `side_panel` conversion to `sidebar_action`
-- Removal of the Chrome-only `sidePanel` permission
+- An inferred toolbar `action` (`default_title` from `name`, `default_icon` from `icons`) when converting `side_panel` and `action` is missing, so Firefox has a button for the side-panel shim. An existing `action` is left alone.
+- Removal of Chrome-only permissions Firefox rejects: `sidePanel`, `identity.email`, and `offscreen`
+- When `permissions` includes `identity` and `browser_specific_settings.gecko.id` is set, a Firefox-build-only host permission `https://<sha1(gecko.id)>.extensions.allizom.org/*` (hex SHA-1, matching `identity.getRedirectURL()`). This is not added to the Chrome source manifest. If `gecko.id` is missing, the host is skipped and the existing warning still applies.
 - Compatibility handling for `chrome.sidePanel` and `browser.sidePanel`
 - Compatibility handling for `identity.getProfileUserInfo`
+- Rewriting `.innerHTML =` to `["innerHTML"] =` in generated `.js` files so Firefox extension CSP does not reject bundled Svelte output
 
-The original `background.service_worker` field is preserved.
+When a manifest field is inferred, the build prints the inferred value, a reminder to add it permanently, and a link to the relevant MDN documentation. If a required value cannot be safely inferred, the adapter warns without inventing a value. The identity redirect host is logged as Firefox-build-only and should not be copied into the Chrome source `manifest.json`.
 
-When a manifest field is inferred, the build prints the inferred value, a reminder to add it permanently, and a link to the relevant MDN documentation. If a required value cannot be safely inferred, the adapter warns without inventing a value.
+### Optional permission lists
+
+After the built-in manifest transforms, add or remove Firefox-only permissions:
+
+```js
+adapter({
+	pages: 'extension',
+	assets: 'extension',
+	firefox: {
+		permissions: {
+			add: ['cookies'],
+			remove: ['storage']
+		},
+		hostPermissions: {
+			add: ['https://example.com/*']
+		}
+	}
+})
+```
+
+`add` concatenates and deduplicates. `remove` filters matching permission strings. Use this instead of a one-off patch script for Firefox-only permissions.
 
 ### Add custom replacements
 
@@ -58,7 +85,7 @@ Each replacement has:
 
 A string `find` replaces every occurrence. A regular expression follows normal JavaScript replacement behavior, so include the `g` flag when every match should be changed.
 
-Custom replacements run against every generated `.js` file before the built-in Firefox replacements.
+Custom replacements run against every generated `.js` file before the built-in Firefox replacements, including `.innerHTML =` → `["innerHTML"] =`.
 
 ### Regular expression replacements
 
@@ -164,7 +191,7 @@ For each match, decide whether it is:
 - Unsupported and needs a fallback or disabled feature
 - A manifest-only difference rather than a JavaScript API difference
 
-The built-in adapter already handles common side-panel calls and `identity.getProfileUserInfo`. Do not add duplicate replacements for those APIs unless the extension requires different behavior.
+The built-in adapter already handles common side-panel calls, `identity.getProfileUserInfo`, and `.innerHTML =` assignments in generated JavaScript. Do not add duplicate replacements for those APIs unless the extension requires different behavior.
 
 ### 4. Choose the smallest safe replacement
 

@@ -1,6 +1,6 @@
 # adapter-extension
 
-Svelte adapter that makes chrome extension support easier
+Svelte adapter that makes extension support easier
 
 ## Installation
 
@@ -49,6 +49,8 @@ Also, make sure you have `routes/+layout.ts` created, with the following
 export const prerender = true;
 ```
 
+
+
 ### Chrome Manifest Options
 
 Make sure in your chrome manifest, you have the following (you can change `<all_urls>` to whatever set of URLs your extension will be active on. Also, `scripts` may be different depending on your `appDir` value.)
@@ -88,37 +90,25 @@ adapter({
 }
 ```
 
-The adapter applies Firefox changes only when running `npm run build-firefox`, so regular Chrome builds remain unchanged. `firefoxBuildScript` defaults to `build-firefox` and can be changed to match another npm script name.
+Firefox transforms run for `npm run build-firefox`, or when `ADAPTER_EXTENSION_FIREFOX=1`. Chrome builds are unchanged. `firefoxBuildScript` defaults to `build-firefox`.
 
-Firefox support translates Chrome side panels and background service workers, patches common incompatible API calls, fills required manifest values when they can be inferred, and warns when a value must be supplied manually.
+Put `browser_specific_settings.gecko.id` (and `data_collection_permissions` for AMO) in your source `manifest.json`. The adapter will not invent them.
 
-Manifest V3 extensions intended for signing must provide `browser_specific_settings.gecko.id`. New AMO submissions must also declare `browser_specific_settings.gecko.data_collection_permissions.required`.
-
-Custom API replacements can be strings, regular expressions, or replacement functions:
+Pass `firefox` as an object for custom API replacements or Firefox-only permission tweaks:
 
 ```js
 adapter({
 	pages: 'extension',
 	assets: 'extension',
-	firefoxBuildScript: 'build-firefox',
 	firefox: {
 		apiReplacements: [
-			{
-				find: 'chrome.exampleApi',
-				replace: 'browser.firefoxApi'
-			},
-			{
-				find: /chrome\.otherApi\.open\((.*?)\)/g,
-				replace: (_match, value) => `browser.otherApi.launch(${value})`
-			}
+			{ find: 'chrome.exampleApi', replace: 'browser.firefoxApi' }
 		]
 	}
 })
 ```
 
-Custom replacements run only for Firefox builds and before the built-in compatibility replacements.
-
-See the [Firefox API documentation](docs/api.md) for complete options and compatibility-review instructions.
+See the [Firefox API documentation](docs/API.md) for what the adapter changes and the full options.
 
 ## Other info
 

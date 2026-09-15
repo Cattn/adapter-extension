@@ -102,7 +102,11 @@ export default function adapterStaticExtension(options = {}) {
 
 		await runPostBuildScript(outputDir);
 
-		if (firefox && process.env.npm_lifecycle_event === firefoxBuildScript) {
+		if (
+			firefox &&
+			(process.env.npm_lifecycle_event === firefoxBuildScript ||
+				process.env.ADAPTER_EXTENSION_FIREFOX === '1')
+		) {
 			await applyFirefoxSupport(outputDir, firefox === true ? {} : firefox);
 		}
 	};
