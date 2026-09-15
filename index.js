@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import adapterStatic from '@sveltejs/adapter-static';
+import { applyFirefoxSupport } from './firefox.js';
 
 async function runPostBuildScript(outputDir) {
 	const extensionDir = outputDir;
@@ -88,7 +89,8 @@ async function runPostBuildScript(outputDir) {
 }
 
 export default function adapterStaticExtension(options = {}) {
-	const adapter = adapterStatic(options);
+	const { firefox = false, firefoxBuildScript = 'build-firefox', ...staticOptions } = options;
+	const adapter = adapterStatic(staticOptions);
 	const originalAdapt = adapter.adapt;
 
 	adapter.name = '@cattn/adapter-extension';
@@ -96,9 +98,13 @@ export default function adapterStaticExtension(options = {}) {
 	adapter.adapt = async (builder) => {
 		await originalAdapt(builder);
 
-		const outputDir = path.resolve(options.pages || 'build');
+		const outputDir = path.resolve(staticOptions.pages || 'build');
 
 		await runPostBuildScript(outputDir);
+
+		if (firefox && process.env.npm_lifecycle_event === firefoxBuildScript) {
+			await applyFirefoxSupport(outputDir, firefox === true ? {} : firefox);
+		}
 	};
 
 	return adapter;
