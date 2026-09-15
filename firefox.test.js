@@ -36,8 +36,7 @@ test('translates a Chrome extension build for Firefox', async () => {
 				permissions: ['sidePanel', 'storage']
 			},
 			files: {
-				'worker.js':
-					'chrome.sidePanel.open({ tabId: 1 }); chrome.identity.getProfileUserInfo(); chrome.exampleApi();'
+				'worker.js': 'chrome.sidePanel.open({ tabId: 1 }); chrome.exampleApi();'
 			}
 		});
 
@@ -57,7 +56,6 @@ test('translates a Chrome extension build for Firefox', async () => {
 		assert.equal(manifest.action.default_title, 'Fixture');
 		assert.deepEqual(manifest.permissions, ['storage']);
 		assert.match(source, /__adapterExtensionFirefox\.sidePanel/);
-		assert.match(source, /__adapterExtensionFirefox\.getProfileUserInfo/);
 		assert.match(source, /browser\.exampleApi/);
 		new Function(source);
 	} finally {
@@ -295,3 +293,87 @@ test('runs custom apiReplacements before built-in JavaScript rewrites', async ()
 		fs.rmSync(outputDir, { recursive: true, force: true });
 	}
 });
+
+function profileWarnings(messages) {
+	return messages.filter((message) => String(message).includes('getProfileUserInfo'));
+}
+
+async function withCapturedWarn(run) {
+	const messages = [];
+	const originalWarn = console.warn;
+	console.warn = (...args) => {
+		messages.push(args.join(' '));
+	};
+
+	try {
+		await run();
+		return messages;
+	} finally {
+		console.warn = originalWarn;
+	}
+}
+
+test('leaves identity.getProfileUserInfo in place and warns once', async () => {
+	const outputDir = createOutputDir();
+
+	try {
+		writeBuild(outputDir, {
+			manifest: { name: 'Profile', version: '1.0.0', manifest_version: 3 },
+			files: {
+				'app.js': 'chrome.identity.getProfileUserInfo();'
+			}
+		});
+
+		const messages = await withCapturedWarn(() => applyFirefoxSupport(outputDir));
+		const source = fs.readFileSync(path.join(outputDir, 'app.js'), 'utf-8');
+
+		assert.match(source, /chrome\.identity\.getProfileUserInfo\(\);/);
+		assert.doesNotMatch(source, /__adapterExtensionFirefox/);
+		assert.equal(profileWarnings(messages).length, 1);
+	} finally {
+		fs.rmSync(outputDir, { recursive: true, force: true });
+	}
+});
+
+test('does not warn about identity.getProfileUserInfo when warnIdentityProfile is false', async () => {
+	const outputDir = createOutputDir();
+
+	try {
+		writeBuild(outputDir, {
+			manifest: { name: 'Profile', version: '1.0.0', manifest_version: 3 },
+			files: {
+				'app.js': 'chrome.identity.getProfileUserInfo();'
+			}
+		});
+
+		const messages = await withCapturedWarn(() =>
+			applyFirefoxSupport(outputDir, { warnIdentityProfile: false })
+		);
+		const source = fs.readFileSync(path.join(outputDir, 'app.js'), 'utf-8');
+
+		assert.match(source, /chrome\.identity\.getProfileUserInfo\(\);/);
+		assert.equal(profileWarnings(messages).length, 0);
+	} finally {
+		fs.rmSync(outputDir, { recursive: true, force: true });
+	}
+});
+
+test('does not warn about identity.getProfileUserInfo when the API is unused', async () => {
+	const outputDir = createOutputDir();
+
+	try {
+		writeBuild(outputDir, {
+			manifest: { name: 'Profile', version: '1.0.0', manifest_version: 3 },
+			files: {
+				'app.js': 'chrome.storage.local.get();'
+			}
+		});
+
+		const messages = await withCapturedWarn(() => applyFirefoxSupport(outputDir));
+
+		assert.equal(profileWarnings(messages).length, 0);
+	} finally {
+		fs.rmSync(outputDir, { recursive: true, force: true });
+	}
+});
+

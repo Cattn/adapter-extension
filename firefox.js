@@ -31,15 +31,6 @@ globalThis.${compatibilityName}.sidePanel ??= {
 		return Promise.resolve();
 	}
 };
-globalThis.${compatibilityName}.getProfileUserInfo ??= (...args) => {
-	const result = { email: '', id: '' };
-	const callback = args.find((argument) => typeof argument === 'function');
-	if (callback) {
-		callback(result);
-		return;
-	}
-	return Promise.resolve(result);
-};
 `;
 
 function warn(message) {
@@ -292,9 +283,13 @@ function applyReplacement(source, replacement) {
 	return source.replace(replacement.find, replacement.replace);
 }
 
-function patchJavascript(outputDir, apiReplacements) {
+const profileUserInfoRe = /\b(?:chrome|browser)\.identity\.getProfileUserInfo\b/;
+
+function patchJavascript(outputDir, options = {}) {
+	const apiReplacements = options.apiReplacements ?? [];
 	const files = [];
 	const directories = [outputDir];
+	let usesProfileUserInfo = false;
 
 	while (directories.length > 0) {
 		const directory = directories.pop();
@@ -316,28 +311,28 @@ function patchJavascript(outputDir, apiReplacements) {
 
 		source = source.replaceAll('.innerHTML =', '["innerHTML"] =');
 
+		if (profileUserInfoRe.test(source)) {
+			usesProfileUserInfo = true;
+		}
+
 		const usesSidePanel = /\b(?:chrome|browser)\.sidePanel\b/.test(source);
-		const usesProfileUserInfo =
-			/\b(?:chrome|browser)\.identity\.getProfileUserInfo\b/.test(source);
 
-		source = source
-			.replace(
-				/\b(?:chrome|browser)\.identity\.getProfileUserInfo\b/g,
-				`globalThis.${compatibilityName}.getProfileUserInfo`
-			)
-			.replace(
-				/\b(?:chrome|browser)\.sidePanel\b/g,
-				`globalThis.${compatibilityName}.sidePanel`
-			);
+		source = source.replace(
+			/\b(?:chrome|browser)\.sidePanel\b/g,
+			`globalThis.${compatibilityName}.sidePanel`
+		);
 
-		if (
-			(usesSidePanel || usesProfileUserInfo) &&
-			!source.startsWith(`globalThis.${compatibilityName}`)
-		) {
+		if (usesSidePanel && !source.startsWith(`globalThis.${compatibilityName}`)) {
 			source = `${compatibilitySource}\n${source}`;
 		}
 
 		fs.writeFileSync(filePath, source, 'utf-8');
+	}
+
+	if (usesProfileUserInfo && options.warnIdentityProfile !== false) {
+		warn(
+			'identity.getProfileUserInfo is Chrome-only and is not shimmed. Add a feature-detect fallback for Firefox, or set firefox.warnIdentityProfile to false.'
+		);
 	}
 }
 
@@ -346,5 +341,5 @@ export async function applyFirefoxSupport(outputDir, options = {}) {
 	validateReplacements(apiReplacements);
 
 	patchManifest(outputDir, options);
-	patchJavascript(outputDir, apiReplacements);
+	patchJavascript(outputDir, options);
 }

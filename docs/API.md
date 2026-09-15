@@ -32,7 +32,7 @@ This enables:
 - Removal of Chrome-only permissions Firefox rejects: `sidePanel`, `identity.email`, and `offscreen`
 - When `permissions` includes `identity` and `browser_specific_settings.gecko.id` is set, a Firefox-build-only host permission `https://<sha1(gecko.id)>.extensions.allizom.org/*` (hex SHA-1, matching `identity.getRedirectURL()`). This is not added to the Chrome source manifest. If `gecko.id` is missing, the host is skipped and the existing warning still applies.
 - Compatibility handling for `chrome.sidePanel` and `browser.sidePanel`
-- Compatibility handling for `identity.getProfileUserInfo`
+- A build warning when generated JavaScript uses `identity.getProfileUserInfo` (Chrome-only; not shimmed). Silence with `firefox.warnIdentityProfile: false`
 - Rewriting `.innerHTML =` to `["innerHTML"] =` in generated `.js` files so Firefox extension CSP does not reject bundled Svelte output
 
 When a manifest field is inferred, the build prints the inferred value, a reminder to add it permanently, and a link to the relevant MDN documentation. If a required value cannot be safely inferred, the adapter warns without inventing a value. The identity redirect host is logged as Firefox-build-only and should not be copied into the Chrome source `manifest.json`.
@@ -58,6 +58,22 @@ adapter({
 ```
 
 `add` concatenates and deduplicates. `remove` filters matching permission strings. Use this instead of a one-off patch script for Firefox-only permissions.
+
+### `identity.getProfileUserInfo`
+
+This API is Chrome-only. The adapter does not rewrite or stub it. If generated JavaScript still contains `chrome.identity.getProfileUserInfo` or `browser.identity.getProfileUserInfo`, the Firefox build prints a warning to add a feature-detect fallback.
+
+Silence that warning after you have a fallback:
+
+```js
+adapter({
+	pages: 'extension',
+	assets: 'extension',
+	firefox: {
+		warnIdentityProfile: false
+	}
+})
+```
 
 ### Add custom replacements
 
@@ -191,7 +207,7 @@ For each match, decide whether it is:
 - Unsupported and needs a fallback or disabled feature
 - A manifest-only difference rather than a JavaScript API difference
 
-The built-in adapter already handles common side-panel calls, `identity.getProfileUserInfo`, and `.innerHTML =` assignments in generated JavaScript. Do not add duplicate replacements for those APIs unless the extension requires different behavior.
+The built-in adapter already handles common side-panel calls and `.innerHTML =` assignments in generated JavaScript. Do not add duplicate replacements for those APIs unless the extension requires different behavior. `identity.getProfileUserInfo` is not shimmed; add a feature-detect fallback in extension source.
 
 ### 4. Choose the smallest safe replacement
 
