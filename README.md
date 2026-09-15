@@ -112,9 +112,9 @@ See the [Firefox API documentation](docs/API.md) for what the adapter changes an
 
 ## Other info
 
-This adapter uses `adapter-static` under the hood, with a few modifications to make building for chrome extensions slightly less painful.
+This adapter uses `adapter-static` under the hood, with a few modifications to make building for extensions slightly less painful.
 
-With this, you can use chrome extension APIs directly in your svelte app.
+With this, you can use extension APIs directly in your svelte app.
 
 ## Why not an existing adapter?
 
