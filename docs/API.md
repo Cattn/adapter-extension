@@ -19,6 +19,8 @@ adapter({
 
 `firefoxBuildScript` defaults to `build-firefox`. Firefox transformations run when that npm script is active, or when `ADAPTER_EXTENSION_FIREFOX=1` is set. Chrome builds stay unchanged unless one of those conditions is true.
 
+Set `splitBuilds: true` alongside `firefox: true` or a Firefox options object to append `-firefox` to both output directories on Firefox builds. Chrome keeps the configured `pages` and `assets` directories. The default is `false`; omitted directories follow adapter-static defaults (`pages: 'build'`, `assets: pages`).
+
 ```sh
 ADAPTER_EXTENSION_FIREFOX=1 vite build
 ```

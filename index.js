@@ -175,24 +175,37 @@ export async function runPostBuildScript(outputDir) {
 }
 
 export default function adapterStaticExtension(options = {}) {
-	const { firefox = false, firefoxBuildScript = 'build-firefox', ...staticOptions } = options;
+	const {
+		firefox = false,
+		firefoxBuildScript = 'build-firefox',
+		splitBuilds = false,
+		...staticOptions
+	} = options;
 	const adapter = adapterStatic(staticOptions);
-	const originalAdapt = adapter.adapt;
 
 	adapter.name = '@cattn/adapter-extension';
 
 	adapter.adapt = async (builder) => {
-		await originalAdapt(builder);
+		const isFirefoxBuild =
+			firefox &&
+			(process.env.npm_lifecycle_event === firefoxBuildScript ||
+				process.env.ADAPTER_EXTENSION_FIREFOX === '1');
+		const buildOptions = { ...staticOptions };
 
-		const outputDir = path.resolve(staticOptions.pages || 'build');
+		if (splitBuilds && isFirefoxBuild) {
+			const pages = staticOptions.pages || 'build';
+			const assets = staticOptions.assets || pages;
+			buildOptions.pages = `${pages}-firefox`;
+			buildOptions.assets = `${assets}-firefox`;
+		}
+
+		await adapterStatic(buildOptions).adapt(builder);
+
+		const outputDir = path.resolve(buildOptions.pages || 'build');
 
 		await runPostBuildScript(outputDir);
 
-		if (
-			firefox &&
-			(process.env.npm_lifecycle_event === firefoxBuildScript ||
-				process.env.ADAPTER_EXTENSION_FIREFOX === '1')
-		) {
+		if (isFirefoxBuild) {
 			await applyFirefoxSupport(outputDir, firefox === true ? {} : firefox);
 		}
 	};

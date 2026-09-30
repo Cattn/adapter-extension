@@ -77,6 +77,7 @@ adapter({
 	pages: 'extension',
 	assets: 'extension',
 	firefox: true,
+	splitBuilds: true,
 	firefoxBuildScript: 'build-firefox'
 })
 ```
@@ -91,6 +92,8 @@ adapter({
 ```
 
 Firefox transforms run for `npm run build-firefox`, or when `ADAPTER_EXTENSION_FIREFOX=1`. Chrome builds are unchanged. `firefoxBuildScript` defaults to `build-firefox`.
+
+`splitBuilds` defaults to `false`. Set it to `true` to append `-firefox` to your `pages` and `assets` directories for Firefox builds (for example, `extension` becomes `extension-firefox`). It requires `firefox: true` or a Firefox options object; Chrome builds keep the configured directories.
 
 Put `browser_specific_settings.gecko.id` (and `data_collection_permissions` for AMO) in your source `manifest.json`. The adapter will not invent them.
 

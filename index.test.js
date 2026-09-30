@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { runPostBuildScript } from './index.js';
+import adapterStaticExtension, { runPostBuildScript } from './index.js';
 
 const hashedJs = 'bundle.D4n8xY1.js';
 const hashedCss = 'bundle.C7a2bX2.css';
@@ -203,3 +203,94 @@ test('skips empty inline scripts and leaves existing src scripts in place', asyn
 		fs.rmSync(outputDir, { recursive: true, force: true });
 	}
 });
+
+for (const fixture of [
+	{ name: 'shared directories', options: { pages: 'extension', assets: 'extension' } },
+	{ name: 'separate directories', options: { pages: 'pages', assets: 'assets' } },
+	{ name: 'default directories', options: {} },
+	{ name: 'assets defaulting to pages', options: { pages: 'extension' } },
+	{
+		name: 'Firefox options and a custom build script',
+		options: { firefox: {}, firefoxBuildScript: 'build-mozilla' }
+	},
+	{ name: 'the environment flag', options: {}, useEnvFlag: true },
+	{ name: 'disabled Firefox support', options: { firefox: false } },
+	{ name: 'disabled splitting', options: { splitBuilds: false } },
+	{ name: 'splitting disabled by default', options: { splitBuilds: undefined } }
+]) {
+	test(`splitBuilds handles ${fixture.name}`, async (t) => {
+		const outputDir = createOutputDir();
+		const originalCwd = process.cwd();
+		const originalEnv = {
+			npm_lifecycle_event: process.env.npm_lifecycle_event,
+			ADAPTER_EXTENSION_FIREFOX: process.env.ADAPTER_EXTENSION_FIREFOX
+		};
+
+		t.after(() => {
+			process.chdir(originalCwd);
+			for (const [key, value] of Object.entries(originalEnv)) {
+				if (value === undefined) delete process.env[key];
+				else process.env[key] = value;
+			}
+			fs.rmSync(outputDir, { recursive: true, force: true });
+		});
+
+		process.chdir(outputDir);
+		delete process.env.ADAPTER_EXTENSION_FIREFOX;
+		const options = { firefox: true, splitBuilds: true, ...fixture.options };
+		const adapter = adapterStaticExtension(options);
+		const pages = options.pages || 'build';
+		const assets = options.assets || pages;
+		const destinations = [];
+		const builder = {
+			config: { kit: { router: { type: 'hash' } } },
+			log: t.mock.fn(),
+			rimraf: (dir) => fs.rmSync(dir, { recursive: true, force: true }),
+			generateEnvModule: () => {},
+			writeClient: (dir) => {
+				destinations.push(dir);
+				writeBuild(dir, { 'asset.txt': 'fixture' });
+			},
+			writePrerendered: (dir) => {
+				destinations.push(dir);
+				writeBuild(dir, {
+					'index.html': sveltePage({ title: 'Home', nodeIds: [0, 2], hashed: false }),
+					'manifest.json': JSON.stringify({
+						name: 'Fixture',
+						version: '1.0.0',
+						manifest_version: 3,
+						background: { service_worker: 'worker.js' },
+						browser_specific_settings: {
+							gecko: {
+								id: 'fixture@example.com',
+								data_collection_permissions: { required: ['none'] }
+							}
+						}
+					})
+				});
+			}
+		};
+
+		process.env.npm_lifecycle_event = 'build';
+		await adapter.adapt(builder);
+		assert.deepEqual(destinations.splice(0), [assets, pages]);
+		const chromeManifest = read(pages, 'manifest.json');
+		assert.equal(JSON.parse(chromeManifest).background.service_worker, 'worker.js');
+
+		process.env.npm_lifecycle_event = fixture.useEnvFlag
+			? 'build'
+			: options.firefoxBuildScript || 'build-firefox';
+		if (fixture.useEnvFlag) process.env.ADAPTER_EXTENSION_FIREFOX = '1';
+		await adapter.adapt(builder);
+
+		const suffix = options.splitBuilds && options.firefox ? '-firefox' : '';
+		assert.deepEqual(destinations, [`${assets}${suffix}`, `${pages}${suffix}`]);
+		assert.equal(read(`${assets}${suffix}`, 'asset.txt'), 'fixture');
+		assert.equal(nonEmptyInlineScripts(read(`${pages}${suffix}`, 'index.html')).length, 0);
+		assert.match(read(`${pages}${suffix}`, 'scripts/init.js'), /globalThis\.__sveltekit_abc123/);
+		const manifest = JSON.parse(read(`${pages}${suffix}`, 'manifest.json'));
+		if (options.firefox) assert.deepEqual(manifest.background, { scripts: ['worker.js'] });
+		else assert.equal(manifest.background.service_worker, 'worker.js');
+		if (suffix) assert.equal(read(pages, 'manifest.json'), chromeManifest);
+	});
+}
