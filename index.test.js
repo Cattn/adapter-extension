@@ -211,7 +211,12 @@ for (const fixture of [
 	{ name: 'assets defaulting to pages', options: { pages: 'extension' } },
 	{
 		name: 'Firefox options and a custom build script',
-		options: { firefox: {}, firefoxBuildScript: 'build-mozilla' }
+		options: {
+			firefox: {
+				apiReplacements: [{ find: 'chrome.exampleApi', replace: 'browser.exampleApi' }]
+			},
+			firefoxBuildScript: 'build-mozilla'
+		}
 	},
 	{ name: 'the environment flag', options: {}, useEnvFlag: true },
 	{ name: 'disabled Firefox support', options: { firefox: false } },
@@ -241,7 +246,12 @@ for (const fixture of [
 		const adapter = adapterStaticExtension(options);
 		const pages = options.pages || 'build';
 		const assets = options.assets || pages;
+		const split = options.splitBuilds && options.firefox;
+		const expectedDestinations = split
+			? [assets, pages, `${assets}-firefox`, `${pages}-firefox`]
+			: [assets, pages];
 		const destinations = [];
+		const workerSource = 'el.innerHTML = html; chrome.exampleApi();';
 		const builder = {
 			config: { kit: { router: { type: 'hash' } } },
 			log: t.mock.fn(),
@@ -255,6 +265,7 @@ for (const fixture of [
 				destinations.push(dir);
 				writeBuild(dir, {
 					'index.html': sveltePage({ title: 'Home', nodeIds: [0, 2], hashed: false }),
+					'worker.js': workerSource,
 					'manifest.json': JSON.stringify({
 						name: 'Fixture',
 						version: '1.0.0',
@@ -273,9 +284,20 @@ for (const fixture of [
 
 		process.env.npm_lifecycle_event = 'build';
 		await adapter.adapt(builder);
-		assert.deepEqual(destinations.splice(0), [assets, pages]);
+		assert.deepEqual(destinations.splice(0), expectedDestinations);
 		const chromeManifest = read(pages, 'manifest.json');
 		assert.equal(JSON.parse(chromeManifest).background.service_worker, 'worker.js');
+		assert.equal(read(pages, 'worker.js'), workerSource);
+		if (split) {
+			const manifest = JSON.parse(read(`${pages}-firefox`, 'manifest.json'));
+			assert.deepEqual(manifest.background, { scripts: ['worker.js'] });
+			assert.match(read(`${pages}-firefox`, 'worker.js'), /el\["innerHTML"\] = html/);
+			if (options.firefox.apiReplacements) {
+				assert.match(read(`${pages}-firefox`, 'worker.js'), /browser\.exampleApi/);
+			}
+			writeBuild(`${pages}-firefox`, { 'stale.txt': 'old build' });
+			writeBuild(`${assets}-firefox`, { 'stale-asset.txt': 'old asset' });
+		}
 
 		process.env.npm_lifecycle_event = fixture.useEnvFlag
 			? 'build'
@@ -283,14 +305,22 @@ for (const fixture of [
 		if (fixture.useEnvFlag) process.env.ADAPTER_EXTENSION_FIREFOX = '1';
 		await adapter.adapt(builder);
 
-		const suffix = options.splitBuilds && options.firefox ? '-firefox' : '';
-		assert.deepEqual(destinations, [`${assets}${suffix}`, `${pages}${suffix}`]);
+		const suffix = split ? '-firefox' : '';
+		assert.deepEqual(destinations, expectedDestinations);
 		assert.equal(read(`${assets}${suffix}`, 'asset.txt'), 'fixture');
 		assert.equal(nonEmptyInlineScripts(read(`${pages}${suffix}`, 'index.html')).length, 0);
 		assert.match(read(`${pages}${suffix}`, 'scripts/init.js'), /globalThis\.__sveltekit_abc123/);
 		const manifest = JSON.parse(read(`${pages}${suffix}`, 'manifest.json'));
 		if (options.firefox) assert.deepEqual(manifest.background, { scripts: ['worker.js'] });
 		else assert.equal(manifest.background.service_worker, 'worker.js');
-		if (suffix) assert.equal(read(pages, 'manifest.json'), chromeManifest);
+		if (split) {
+			assert.equal(read(pages, 'manifest.json'), chromeManifest);
+			assert.equal(read(pages, 'worker.js'), workerSource);
+			assert.equal(fs.existsSync(path.join(`${pages}-firefox`, 'stale.txt')), false);
+			assert.equal(fs.existsSync(path.join(`${assets}-firefox`, 'stale-asset.txt')), false);
+			const patched = { ...JSON.parse(chromeManifest), key: 'development-key' };
+			writeBuild(pages, { 'manifest.json': JSON.stringify(patched) });
+			assert.equal(JSON.parse(read(`${pages}-firefox`, 'manifest.json')).key, undefined);
+		}
 	});
 }

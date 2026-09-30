@@ -182,28 +182,33 @@ export default function adapterStaticExtension(options = {}) {
 		...staticOptions
 	} = options;
 	const adapter = adapterStatic(staticOptions);
+	const originalAdapt = adapter.adapt;
 
 	adapter.name = '@cattn/adapter-extension';
 
 	adapter.adapt = async (builder) => {
 		const isFirefoxBuild =
 			firefox &&
-			(process.env.npm_lifecycle_event === firefoxBuildScript ||
+			(splitBuilds ||
+				process.env.npm_lifecycle_event === firefoxBuildScript ||
 				process.env.ADAPTER_EXTENSION_FIREFOX === '1');
-		const buildOptions = { ...staticOptions };
+		let outputDir = path.resolve(staticOptions.pages || 'build');
 
-		if (splitBuilds && isFirefoxBuild) {
+		await originalAdapt(builder);
+		await runPostBuildScript(outputDir);
+
+		if (splitBuilds && firefox) {
 			const pages = staticOptions.pages || 'build';
 			const assets = staticOptions.assets || pages;
-			buildOptions.pages = `${pages}-firefox`;
-			buildOptions.assets = `${assets}-firefox`;
+			const firefoxOptions = {
+				...staticOptions,
+				pages: `${pages}-firefox`,
+				assets: `${assets}-firefox`
+			};
+			await adapterStatic(firefoxOptions).adapt(builder);
+			outputDir = path.resolve(firefoxOptions.pages);
+			await runPostBuildScript(outputDir);
 		}
-
-		await adapterStatic(buildOptions).adapt(builder);
-
-		const outputDir = path.resolve(buildOptions.pages || 'build');
-
-		await runPostBuildScript(outputDir);
 
 		if (isFirefoxBuild) {
 			await applyFirefoxSupport(outputDir, firefox === true ? {} : firefox);

@@ -17,13 +17,13 @@ adapter({
 })
 ```
 
-`firefoxBuildScript` defaults to `build-firefox`. Firefox transformations run when that npm script is active, or when `ADAPTER_EXTENSION_FIREFOX=1` is set. Chrome builds stay unchanged unless one of those conditions is true.
-
-Set `splitBuilds: true` alongside `firefox: true` or a Firefox options object to append `-firefox` to both output directories on Firefox builds. Chrome keeps the configured `pages` and `assets` directories. The default is `false`; omitted directories follow adapter-static defaults (`pages: 'build'`, `assets: pages`).
+With `splitBuilds` disabled (the default), `firefoxBuildScript` defaults to `build-firefox`. Firefox transformations run when that npm script is active, or when `ADAPTER_EXTENSION_FIREFOX=1` is set. Chrome builds stay unchanged unless one of those conditions is true.
 
 ```sh
 ADAPTER_EXTENSION_FIREFOX=1 vite build
 ```
+
+Set `splitBuilds: true` alongside `firefox: true` or a Firefox options object to generate both browsers with a single `vite build`. SvelteKit compiles once; the adapter writes Chrome to the configured `pages` and `assets` directories and Firefox to those directories with `-firefox` appended, applying Firefox transforms only there. Every build produces both outputs, regardless of the npm script name or environment flag. The default is `false`; omitted directories follow adapter-static defaults (`pages: 'build'`, `assets: pages`).
 
 This enables:
 

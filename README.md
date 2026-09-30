@@ -70,30 +70,30 @@ Also, I'd recommend putting your `manifest.json`, and any other seperate scripts
 
 ### Firefox Support
 
-Set `firefox: true` and add a `build-firefox` npm script:
+Set `firefox: true` and `splitBuilds: true` to build Chrome and Firefox together:
 
 ```js
 adapter({
 	pages: 'extension',
 	assets: 'extension',
 	firefox: true,
-	splitBuilds: true,
-	firefoxBuildScript: 'build-firefox'
+	splitBuilds: true
 })
 ```
 
 ```json
 {
 	"scripts": {
-		"build": "vite build",
-		"build-firefox": "vite build"
+		"build": "vite build"
 	}
 }
 ```
 
-Firefox transforms run for `npm run build-firefox`, or when `ADAPTER_EXTENSION_FIREFOX=1`. Chrome builds are unchanged. `firefoxBuildScript` defaults to `build-firefox`.
+`npm run build` compiles once and writes both `extension` (Chrome) and `extension-firefox` (Firefox). Firefox transforms apply only to the Firefox output. A post-build command such as `vite build && npm run patch-dev` can then patch the Chrome directory without affecting Firefox.
 
-`splitBuilds` defaults to `false`. Set it to `true` to append `-firefox` to your `pages` and `assets` directories for Firefox builds (for example, `extension` becomes `extension-firefox`). It requires `firefox: true` or a Firefox options object; Chrome builds keep the configured directories.
+`splitBuilds` defaults to `false` and requires `firefox: true` or a Firefox options object. When enabled, every build writes Chrome to the configured `pages` and `assets` directories and Firefox to those directories with `-firefox` appended.
+
+Without `splitBuilds`, Firefox transforms run only for `npm run build-firefox`, or when `ADAPTER_EXTENSION_FIREFOX=1`, using the configured directories. Add a `"build-firefox": "vite build"` script for this workflow; `firefoxBuildScript` defaults to `build-firefox`.
 
 Put `browser_specific_settings.gecko.id` (and `data_collection_permissions` for AMO) in your source `manifest.json`. The adapter will not invent them.
 
